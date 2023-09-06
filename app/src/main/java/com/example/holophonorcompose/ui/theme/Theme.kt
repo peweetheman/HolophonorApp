@@ -1,10 +1,17 @@
 package com.example.holophonorcompose.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.darkColors
 import androidx.compose.material.lightColors
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.paint
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import com.example.holophonorcompose.R
 
 private val DarkColorPalette = darkColors(
     primary = Purple200,
@@ -32,11 +39,13 @@ fun HolophonorTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit
 ) {
-    val colors = if (darkTheme) {
-        DarkColorPalette
-    } else {
-        LightColorPalette
-    }
+//    val colors = if (darkTheme) {
+//        DarkColorPalette
+//    } else {
+//        LightColorPalette
+//    }
+
+    val colors = LightColorPalette
 
     MaterialTheme(
         colors = colors,
@@ -44,4 +53,20 @@ fun HolophonorTheme(
         shapes = Shapes,
         content = content
     )
+}
+
+@Composable
+fun BackgroundImage(
+    content: @Composable () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .paint(
+                painterResource(id = R.drawable.background_purple_vuluptous),
+                contentScale = ContentScale.FillBounds
+            )
+    ) {
+        content()
+    }
 }

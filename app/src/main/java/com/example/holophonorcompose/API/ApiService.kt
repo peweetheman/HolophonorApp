@@ -10,10 +10,10 @@ import retrofit2.http.Part
 interface ApiService {
 
     @Multipart
-    @POST("your/api/endpoint") // Replace with the actual URL for generating video
-    fun uploadAudioFile(@Part audio: MultipartBody.Part): Call<ResponseBody>
+    @POST("http://20.62.248.234:5000//generateVideo")
+    fun generateVideo(@Part audio: MultipartBody.Part): Call<ResponseBody>
 
     @Multipart
-    @POST("generateAudio") // New endpoint for generating audio from text
+    @POST("http://20.62.248.234:5000//generateAudio")
     fun generateAudioFromText(@Part text: MultipartBody.Part): Call<ResponseBody>
 }

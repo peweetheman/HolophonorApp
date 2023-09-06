@@ -27,6 +27,7 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
     compileOptions {
@@ -51,6 +52,8 @@ android {
 }
 
 dependencies {
+    implementation("androidx.compose.material:material-icons-extended")
+    implementation("com.google.android.exoplayer:exoplayer:2.19.1")
     implementation("androidx.compose.material:material:1.5.0")
     implementation("com.google.accompanist:accompanist-permissions:0.23.1")
     implementation("androidx.navigation:navigation-compose:2.7.1")

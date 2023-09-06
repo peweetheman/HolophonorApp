@@ -21,11 +21,11 @@ class ApiClient {
         apiService = retrofit.create(ApiService::class.java)
     }
 
-    fun uploadAudioFile(audioFile: File): Call<ResponseBody> {
+    fun generateVideoFromAudio(audioFile: File): Call<ResponseBody> {
         val audioRequestBody = RequestBody.create(MediaType.parse("audio/*"), audioFile)
         val audioPart = MultipartBody.Part.createFormData("audio", "audio.mp3", audioRequestBody)
 
-        return apiService.uploadAudioFile(audioPart)
+        return apiService.generateVideo(audioPart)
     }
 
     fun generateAudioFromText(text: String): Call<ResponseBody> {
