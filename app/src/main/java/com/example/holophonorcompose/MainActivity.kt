@@ -1,9 +1,11 @@
 package com.example.holophonorcompose
 
+import FileViewModel
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.os.Environment
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -21,68 +23,66 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.style.*
 import com.example.holophonorcompose.recording.AndroidAudioPlayer
-
 import androidx.compose.foundation.Image
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.filled.Pause  // ok
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.net.toUri
+import androidx.media3.common.MediaItem
 import com.example.holophonorcompose.API.ApiClient
 import com.example.holophonorcompose.ui.theme.BackgroundImage
 
 import com.example.holophonorcompose.ui.theme.HolophonorTheme
-import com.google.android.exoplayer2.MediaItem
-import com.google.android.exoplayer2.SimpleExoPlayer
-import com.google.android.exoplayer2.ui.PlayerView
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.PlayerView
 import okhttp3.ResponseBody
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
 import java.io.File
 import java.io.FileOutputStream
+import java.io.IOException
 
 class MainActivity : ComponentActivity() {
     private val filePickerLauncher =
         registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
             if (uri != null) {
-                // Process the selected audio file (uri)
+                Log.d("log info", uri.path.toString())
+                val file: File? = fileModel.loadAudioFileFromUri(uri)
+                fileModel.updateFile(file!!)
+                Log.d("log info", fileModel.audioFileState.value.name)
             }
         }
-
-    private lateinit var audioFile: File
 
     private val audioPlayer by lazy {
         AndroidAudioPlayer(applicationContext)
     }
 
+    private val fileModel by lazy {
+        FileViewModel(applicationContext)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val audioFileUri = intent.getStringExtra("audioFileUri")
+        if (audioFileUri != null) {
+            val file: File? = fileModel.loadAudioFileFromUri(audioFileUri.toUri())
+            fileModel.updateFile(file!!)
+        }
 
         setContent {
-            val context = LocalContext.current
-            val resourceId = R.raw.sample15s // Replace "audio" with the actual resource name
-            audioFile = File(context.cacheDir, "audio.mp3") // Change the file name as needed
-            val inputStream = context.resources.openRawResource(resourceId)
-            val outputStream = FileOutputStream(audioFile)
-
-            inputStream.use { input ->
-                outputStream.use { output ->
-                    input.copyTo(output)
-                }
-            }
-
             HolophonorTheme {
                 BackgroundImage() {
-                    MainScreen(context)
+                    MainScreen(LocalContext.current)
                 }
             }
         }
@@ -158,7 +158,7 @@ class MainActivity : ComponentActivity() {
                             .fillMaxWidth()
                     )
                     Text(
-                        text = audioFile.name,
+                        text = fileModel.audioFileState.value.name,
                         color = Color.White,
                         fontSize = 18.sp,
                         modifier = Modifier
@@ -167,15 +167,13 @@ class MainActivity : ComponentActivity() {
                     )
                 }
 
-                var isAudioPlaying by remember { mutableStateOf(false) }
                 IconButton(
                     onClick = {
-                        if (isAudioPlaying) {
+                        if (audioPlayer.isAudioPlaying.value) {
                             audioPlayer.stop()
                         } else {
-                            audioPlayer.playFile(audioFile)
+                            audioPlayer.playFile(fileModel.audioFileState.value)
                         }
-                        isAudioPlaying = !isAudioPlaying
                     },
                     modifier = Modifier
                         .size(100.dp)
@@ -183,8 +181,8 @@ class MainActivity : ComponentActivity() {
                         .fillMaxWidth()
                 ) {
                     Icon(
-                        imageVector = if (isAudioPlaying) Icons.Default.PauseCircle else Icons.Default.PlayCircle,
-                        contentDescription = if (isAudioPlaying) "Pause" else "Play",
+                        imageVector = if (audioPlayer.isAudioPlaying.value) Icons.Default.PauseCircle else Icons.Default.PlayCircle,
+                        contentDescription = if (audioPlayer.isAudioPlaying.value) "Pause" else "Play",
                         tint = Color.LightGray,
                         modifier = Modifier.size(48.dp)
                     )
@@ -192,7 +190,16 @@ class MainActivity : ComponentActivity() {
             }
 
             Button(
-                onClick = { generateVideo(context) },
+                onClick = {
+                    generateVideo(context) { uri ->
+                        if (uri != null) {
+                            Log.d("SUCCESS", "UPDATED FILE MODEL URI")
+                            fileModel.updateVideoUri(uri)
+                        } else {
+                            Log.d("ERROR", "URI WAS NULL")
+                        }
+                    }
+                },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(120.dp),
@@ -203,30 +210,28 @@ class MainActivity : ComponentActivity() {
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            VideoPlayer(videoUri = Uri.parse("https://download.samplelib.com/mp4/sample-10s.mp4"))
+            VideoPlayer(fileModel)
         }
     }
 
-    fun generateVideo(context: Context) {
+    private fun generateVideo(context: Context, callback: (Uri?) -> Unit) {
         val apiClient = ApiClient()
+        var uri: Uri? = null
         Log.d("info", "called endpoint to generate video")
 
-        val callUpload = apiClient.generateVideoFromAudio(audioFile)
+        val callUpload = apiClient.generateVideoFromAudio(fileModel.audioFileState.value)
         callUpload.enqueue(object : Callback<ResponseBody> {
             override fun onResponse(call: Call<ResponseBody>, response: Response<ResponseBody>) {
                 if (response.isSuccessful) {
                     Log.d("info", "SUCCESS NO WAY HOMIE")
-
-                    // Handle the successful response, which should contain the generated video data
                     val responseBody = response.body()
-                    val generatedVideoData = responseBody?.bytes()
-
-                    // Save the received audio data to a file or process it as needed
+                    if (responseBody != null) {
+                        uri = saveResponseBodyToTempFile(context, responseBody)
+                        callback(uri) // Update the Uri using the callback
+                    }
                 } else {
                     val responseBody = response.body()
                     Log.d("info", "FAILURE: " + responseBody.toString())
-                    Log.d("info", responseBody.toString())
-                    // Handle the API error response for generating audio
                 }
             }
 
@@ -237,46 +242,63 @@ class MainActivity : ComponentActivity() {
         })
     }
 
-    @Composable
-    fun VideoPlayer(videoUri: Uri) {
-        val context = LocalContext.current
-        val exoPlayer = remember {
-            SimpleExoPlayer.Builder(context).build().apply {
-                setMediaItem(MediaItem.fromUri(videoUri))
-                prepare()
+    fun saveResponseBodyToTempFile(context: Context, responseBody: ResponseBody): Uri {
+        val tempDir = context.getExternalFilesDir(Environment.DIRECTORY_MOVIES)
+        val tempFile = File(tempDir, "video.mp4")
+        try {
+            val inputStream = responseBody.byteStream()
+            val outputStream = FileOutputStream(tempFile)
+            val buffer = ByteArray(4096)
+            var bytesRead: Int
+
+            while (inputStream.read(buffer).also { bytesRead = it } != -1) {
+                outputStream.write(buffer, 0, bytesRead)
             }
+            outputStream.flush() // Add this line
+            outputStream.close()
+            inputStream.close()
+        } catch (e: IOException) {
+            throw e
         }
+        Log.d("URI", tempFile.toURI().toString())
+        return tempFile.toUri()
+    }
+
+    @Composable
+    @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
+    fun VideoPlayer(fileModel: FileViewModel) {
+
+        Text(fileModel.videoFileUri.toString())
+        Spacer(modifier = Modifier.width(16.dp))
+
+        val context = LocalContext.current
+        val mediaItem = MediaItem.fromUri(fileModel.videoFileUri.value)
+
+        val exoPlayer by remember { mutableStateOf(ExoPlayer.Builder(context).build()) }
+        exoPlayer.setMediaItem(mediaItem)
+        exoPlayer.prepare()
 
         AndroidView(
-            factory = { context ->
+            modifier = Modifier.fillMaxSize(), // Occupy the max size in the Compose UI tree
+            factory = {
                 PlayerView(context).apply {
                     player = exoPlayer
                 }
             },
-            modifier = Modifier.fillMaxSize()
+            update = { view ->
+                // View's been inflated or state read in this block has been updated
+                //  AndroidView will recompose whenever the state changes of exoPlayer
+                view.player = exoPlayer
+            }
         )
 
-        IconButton(
-            onClick = {
-                if (exoPlayer.isPlaying) {
-                    exoPlayer.pause()
-                } else {
-                    exoPlayer.play()
-                }
-            },
-            modifier = Modifier
-                .padding(16.dp)
-        ) {
-            Icon(
-                imageVector = if (exoPlayer.isPlaying) Icons.Default.Pause else Icons.Filled.PlayArrow,
-                contentDescription = if (exoPlayer.isPlaying) "Pause" else "Play",
-                tint = Color.White,
-                modifier = Modifier.size(48.dp)
-            )
+        DisposableEffect(Unit) {
+            onDispose {
+                exoPlayer.release()
+            }
         }
-
-
     }
+
     @Preview(showBackground = true)
     @Composable
     fun MainScreenPreview() {

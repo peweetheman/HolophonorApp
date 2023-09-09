@@ -52,8 +52,11 @@ android {
 }
 
 dependencies {
+    implementation("com.squareup.okhttp3:logging-interceptor:3.9.0")
     implementation("androidx.compose.material:material-icons-extended")
-    implementation("com.google.android.exoplayer:exoplayer:2.19.1")
+    implementation("androidx.media3:media3-exoplayer:1.1.1")
+    implementation("androidx.media3:media3-exoplayer-dash:1.1.1")
+    implementation("androidx.media3:media3-ui:1.1.1")
     implementation("androidx.compose.material:material:1.5.0")
     implementation("com.google.accompanist:accompanist-permissions:0.23.1")
     implementation("androidx.navigation:navigation-compose:2.7.1")

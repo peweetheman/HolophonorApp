@@ -1,11 +1,14 @@
 package com.example.holophonorcompose
 
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
+import android.os.Environment
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -16,21 +19,24 @@ import okhttp3.ResponseBody
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
-import java.io.File
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.selection.selectableGroup
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.*
+import androidx.compose.material.icons.Icons
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
+import androidx.core.net.toUri
 import com.example.holophonorcompose.ui.theme.BackgroundImage
+import java.io.File
+import java.io.FileOutputStream
+import java.io.IOException
 
 class GenerateSongActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -68,41 +74,71 @@ fun GenerateSongUI() {
     var selectedInstruments by remember { mutableStateOf(setOf<Instrument>()) }
     var selectedTempo by remember { mutableStateOf<Tempo?>(null) }
 
-    var selectedTab by remember { mutableStateOf(0) } // Track the selected tab index
+    var selectedTab by remember { mutableIntStateOf(0) } // Track the selected tab index
 
     val genreOptions = Genre.values().toList()
     val moodOptions = Mood.values().toList()
     val instrumentOptions = Instrument.values().toList()
     val tempoOptions = Tempo.values().toList()
 
+    val headerFontSize = 15.sp
+    val tabOptions = listOf("Genres", "Moods", "Instruments")
+    var isDropdownExpanded by remember { mutableStateOf(false) }
     Column(
         modifier = Modifier.padding(16.dp)
     ) {
         TabRow(
-            selectedTabIndex = selectedTab, // Use the selectedTab state
-            backgroundColor = Color.DarkGray,
-            modifier = Modifier.fillMaxWidth()
+            selectedTabIndex = selectedTab,
+            backgroundColor = MaterialTheme.colors.secondary,
+            contentColor = Color.White,
         ) {
-            Tab(
-                text = { Text("Genres", color = Color.White ) },
-                selected = selectedTab == 0, // Check if this tab is selected
-                onClick = { selectedTab = 0 }
-            )
-            Tab(
-                text = { Text("Moods", color = Color.White) },
-                selected = selectedTab == 1,
-                onClick = { selectedTab = 1 }
-            )
-            Tab(
-                text = { Text("Instruments", color = Color.White) },
-                selected = selectedTab == 2,
-                onClick = { selectedTab = 2 }
-            )
-            Tab(
-                text = { Text("Tempo", color = Color.White) },
-                selected = selectedTab == 3,
-                onClick = { selectedTab = 3 }
-            )
+            tabOptions.forEachIndexed { index, title ->
+                Tab(
+                    text = { Text(
+                        text = title,
+                        fontSize = headerFontSize,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.zIndex(1000000f)
+                    )},
+                    selected = selectedTab == index,
+                    onClick = {
+                        selectedTab = index
+                        isDropdownExpanded = false // Close the dropdown when a tab is clicked
+                    },
+                    modifier = Modifier
+                        .height(50.dp)
+                )
+            }
+
+            // Dropdown Tempo Tab
+            Box(
+                modifier = Modifier.clickable { isDropdownExpanded = !isDropdownExpanded },
+                contentAlignment = Alignment.Center
+            ) {
+                Text("Tempo", fontSize = headerFontSize)
+                Icon(
+                    imageVector = Icons.Default.ArrowDropDown,
+                    contentDescription = "downArrow",
+                    modifier = Modifier
+                        .padding(top = (headerFontSize.value * 1.5).dp)
+                        .size(headerFontSize.value.dp)
+                )
+                DropdownMenu(
+                    expanded = isDropdownExpanded,
+                    onDismissRequest = { isDropdownExpanded = false },
+                ) {
+                    tempoOptions.forEachIndexed { index, option ->
+                        DropdownMenuItem(
+                            onClick = {
+                                isDropdownExpanded = false
+                                selectedTempo = option
+                            }
+                        ) {
+                            Text(text = option.toString())
+                        }
+                    }
+                }
+            }
         }
 
         when (selectedTab) {
@@ -129,14 +165,6 @@ fun GenerateSongUI() {
                     onInstrumentSelected = { selectedInstruments = it }
                 )
             }
-
-            3 -> {
-                TempoTab(
-                    tempoOptions = tempoOptions,
-                    selectedTempo = selectedTempo,
-                    onTempoSelected = { selectedTempo = it }
-                )
-            }
         }
 
 
@@ -158,6 +186,7 @@ fun SelectedOptionsList(
     selectedInstruments: Set<Instrument>,
     selectedTempo: Tempo?
 ) {
+    val context = LocalContext.current
     Text("Selected Options:", color = Color.White)
     Spacer(modifier = Modifier.height(8.dp))
 
@@ -180,6 +209,35 @@ fun SelectedOptionsList(
     selectedTempo?.let {
         Text("Tempo: ${it.name}", color = Color.White)
     }
+
+    Row(
+        modifier = Modifier
+            .padding(top = 50.dp),
+        horizontalArrangement = Arrangement.Center
+    )
+    {
+        Button(
+            onClick = {
+                val prompt = "Genres: " + selectedGenres.joinToString(", ") +
+                        " Moods: " + selectedMoods.joinToString(", ") +
+                        " Instruments: " + selectedInstruments.joinToString(", ") +
+                        " Tempo: " + selectedTempo.toString()
+                generateSong(prompt, context) { uri ->
+                    if (uri != null) {
+                        Log.d("SUCCESS", "LAUNCHING MAIN ACTIVITY WITH SONG URI")
+                        val intent = Intent(context, MainActivity::class.java)
+                        intent.putExtra("audioFileUri", uri.toString())
+                        context.startActivity(intent)
+                    } else {
+                        Log.d("ERROR", "URI WAS NULL")
+                    }
+                }
+            }
+        )
+        {
+            Text("Generate Song")
+        }
+    }
 }
 
 
@@ -192,7 +250,7 @@ private fun GenreTab(
 ) {
     Column(
         modifier = Modifier
-            .fillMaxSize()
+            .fillMaxWidth()
             .padding(16.dp)
     ) {
         Text("Select Genres:", color = Color.White)
@@ -244,7 +302,7 @@ private fun MoodTab(
 ) {
     Column(
         modifier = Modifier
-            .fillMaxSize()
+            .fillMaxWidth()
             .padding(16.dp)
     ) {
         Text("Select Moods:", color = Color.White)
@@ -295,7 +353,7 @@ private fun InstrumentTab(
 ) {
     Column(
         modifier = Modifier
-            .fillMaxSize()
+            .fillMaxWidth()
             .padding(16.dp)
     ) {
         Text("Select Instruments:", color = Color.White)
@@ -337,73 +395,24 @@ private fun InstrumentTab(
     }
 }
 
-@Composable
-private fun TempoTab(
-    tempoOptions: List<Tempo>,
-    selectedTempo: Tempo?,
-    onTempoSelected: (Tempo?) -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp)
-    ) {
-        // Create a dropdown menu for selecting tempo
-        var expanded by remember { mutableStateOf(false) }
 
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(Color.White)
-                .clickable { expanded = true }
-        ) {
-            BasicTextField(
-                value = selectedTempo?.name ?: "Select Tempo",
-                onValueChange = {},
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp)
-            )
-
-            DropdownMenu(
-                expanded = expanded,
-                onDismissRequest = { expanded = false },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Color.White)
-            ) {
-                tempoOptions.forEach { tempo ->
-                    DropdownMenuItem(
-                        onClick = {
-                            onTempoSelected(tempo)
-                            expanded = false
-                        }
-                    ) {
-                        Text(text = tempo.name, color = Color.White)
-                    }
-                }
-            }
-        }
-    }
-}
-
-
-fun GenerateSong() {
+fun generateSong(textToGenerateAudio: String, context : Context, callback: (Uri?) -> Unit) {
     val apiClient = ApiClient()
-
-    val textToGenerateAudio = "This is the text to convert to audio."
+    var uri: Uri? = null
 
     val callGenerateAudio = apiClient.generateAudioFromText(textToGenerateAudio)
     callGenerateAudio.enqueue(object : Callback<ResponseBody> {
         override fun onResponse(call: Call<ResponseBody>, response: Response<ResponseBody>) {
             if (response.isSuccessful) {
-                // Handle the successful response, which should contain the generated audio data
+                Log.d("info", "SUCCESS NO WAY HOMIE")
                 val responseBody = response.body()
-                val generatedAudioData = responseBody?.bytes()
-
-                // Save the received audio data to a file or process it as needed
+                if (responseBody != null) {
+                    uri = saveResponseBodyToTempFile(context, responseBody)
+                    callback(uri) // Update the Uri using the callback
+                }
             } else {
-                // Handle the API error response for generating audio
+                val responseBody = response.body()
+                Log.d("info", "FAILURE: " + responseBody.toString())
             }
         }
 
@@ -411,6 +420,28 @@ fun GenerateSong() {
             // Handle network or other failures
         }
     })
+}
+
+fun saveResponseBodyToTempFile(context: Context, responseBody: ResponseBody): Uri {
+    val tempDir = context.getExternalFilesDir(Environment.DIRECTORY_MUSIC)
+    val tempFile = File(tempDir, "generated_song.mp3")
+    try {
+        val inputStream = responseBody.byteStream()
+        val outputStream = FileOutputStream(tempFile)
+        val buffer = ByteArray(4096)
+        var bytesRead: Int
+
+        while (inputStream.read(buffer).also { bytesRead = it } != -1) {
+            outputStream.write(buffer, 0, bytesRead)
+        }
+        outputStream.flush() // Add this line
+        outputStream.close()
+        inputStream.close()
+    } catch (e: IOException) {
+        throw e
+    }
+    Log.d("URI", tempFile.toURI().toString())
+    return tempFile.toUri()
 }
 
 @Preview(showBackground = true)
