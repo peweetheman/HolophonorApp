@@ -4,11 +4,11 @@ plugins {
 }
 
 android {
-    namespace = "com.example.holophonorcompose"
+    namespace = "roc.ventures.holophonorCompose"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.example.holophonorcompose"
+        applicationId = "roc.ventures.holophonorCompose"
         minSdk = 24
         targetSdk = 34
         versionCode = 1
